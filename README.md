@@ -1,39 +1,27 @@
 # AI RAG Product Checker
 
-AI RAG Product Checker is a FastAPI-based service designed to verify FDA Philippines-regulated products using both database lookups and AI-powered image analysis. The application supports verification of food products, drug products, medical devices, cosmetics, and establishments.
+AI RAG Product Checker is a FastAPI-based service for verifying FDA Philippines-regulated products using database lookups and AI-powered image analysis. The application supports drugs, food products, medical devices, cosmetics, and establishments.
 
 ## Features
 
-- **ID-based Verification**: Check products by registration numbers, license numbers, or tracking numbers.
-- **AI Image Verification**: Upload product images for AI-powered extraction and verification using Groq.
-- **Fuzzy Matching**: Intelligent matching with multiple scoring algorithms.
-- **Multi-category Support**: Handles drugs, food, medical devices, cosmetics, and establishments.
-- **RESTful API**: Clean API endpoints with proper error handling and documentation.
-- **AI Vision**: Advanced text extraction using Groq's vision models for fast and accurate results.
-- **High Performance**: Optimized with uvloop and httptools for 2-4x faster async I/O performance.
+- **ID-based verification**: Check products by registration numbers, license numbers, or tracking numbers.
+- **Hybrid image verification**: Upload product images for AI extraction and database matching using Groq vision models.
+- **Fuzzy matching**: Similarity scoring with PostgreSQL full-text search and trigram matching.
+- **Multi-category support**: Drugs, food, medical devices, cosmetics, and establishments.
+- **RESTful API**: FastAPI endpoints with Pydantic validation and automatic OpenAPI documentation.
+- **High performance**: uvloop, httptools, asyncpg connection pooling, and orjson response serialization.
 
 ## Performance Optimizations
 
-This application is optimized for high-performance async operations:
+The application is tuned for high-throughput async workloads:
 
-### uvloop + httptools Integration
-- **uvloop**: Drop-in replacement for asyncio's event loop, providing 2-4x performance improvement
-- **httptools**: Fast HTTP request/response parser written in Cython
-- **Async Database Operations**: Using asyncpg for PostgreSQL with connection pooling
-- **Fast JSON Serialization**: Using orjson for rapid JSON encoding/decoding
+- **uvloop**: Drop-in asyncio event loop replacement (2–4× throughput improvement in production).
+- **httptools**: Fast HTTP request/response parsing.
+- **asyncpg**: Async PostgreSQL driver with connection pooling.
+- **orjson**: Fast JSON serialization via `ORJSONResponse`.
+- **GZip middleware**: Compresses responses larger than 1 KB.
 
-### Why This Matters for Your Use Case
-- **AI Image Processing**: Faster I/O means quicker image uploads and processing
-- **Database Queries**: Better handling of concurrent database lookups and fuzzy matching
-- **External API Calls**: Improved performance when calling FDA verification endpoints
-- **Concurrent Requests**: Better scalability for multiple simultaneous product verifications
-
-### Benchmarks
-Typical performance improvements with uvloop + httptools:
-- **Request throughput**: 2-4x increase in requests per second
-- **Response latency**: 30-50% reduction in average response time
-- **Memory usage**: 10-20% lower memory footprint
-- **CPU efficiency**: Better utilization of system resources
+In development mode, hot reload runs without uvloop/httptools to avoid conflicts. Production mode enables both with multiple workers.
 
 ## Project Structure
 
@@ -54,241 +42,243 @@ Typical performance improvements with uvloop + httptools:
 │   ├── services/
 │   │   ├── vision_service.py
 │   │   ├── product_verification_service.py
+│   │   ├── extractor.py
 │   │   └── upsert_extractors/
-│   └── utils/
+│   ├── utils/
+│   └── main.py
 ├── bruno_api_testing/
+├── migrations/
+├── tests/
 ├── .env.example
-├── README.md
-└── requirements.txt
+├── pyproject.toml
+├── requirements.txt
+├── run_production.py
+└── README.md
 ```
 
-- **app/api**: API endpoints and dependency injection.
-- **app/core**: Core application settings, database configuration, and logging.
+- **app/api**: API routes and dependency injection.
+- **app/core**: Settings, database setup, and Loguru logging configuration.
 - **app/models**: SQLAlchemy database models.
-- **app/schemas**: Pydantic schemas for data validation and serialization.
-- **app/services**: Business logic, including product verification and AI vision services.
-- **app/utils**: Helper functions.
-- **bruno_api_testing**: API tests using Bruno.
+- **app/schemas**: Pydantic schemas for request/response validation.
+- **app/services**: Product verification, vision processing, and data extractors.
+- **app/utils**: Shared helper functions.
+- **bruno_api_testing**: Bruno API test collection.
+- **migrations**: SQL scripts for FTS indexes and PostgreSQL extensions.
+- **tests**: Pytest test suite.
 
 ## Prerequisites
 
 - Python 3.9 or higher
-- PostgreSQL database
-- Git
-- pip (Python package installer)
+- PostgreSQL
+- pip
 
 ## Installation
 
-1. **Clone the repository:**
-   ```bash
-   git clone <repository-url>
-   cd <repository-name>
-   ```
+1. Clone the repository and enter the project directory.
 
-2. **Create a virtual environment:**
+2. Create and activate a virtual environment:
+
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
-3. **Install dependencies:
+3. Install dependencies:
+
    ```bash
    pip install -r requirements.txt
    ```
 
-4. **Create a `.env` file by copying the example:**
+   For development tools (Ruff, pytest, coverage):
+
+   ```bash
+   pip install -e ".[dev]"
+   ```
+
+4. Copy the example environment file:
+
    ```bash
    cp .env.example .env
    ```
 
 ## Configuration
 
-### Environment Variables
-
-Update the `.env` file with your specific configuration:
+Update `.env` with your local settings. Key variables:
 
 ```
-# Database Configuration
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/product_checker
-
-# Application Configuration
-APP_NAME=AI RAG Product Checker
-APP_VERSION=1.0.0
+# Environment
 ENVIRONMENT=development
-DEBUG=True
+DEBUG=true
 
-# Security Settings
-SECRET_KEY=your-super-secret-key-here
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
+# Database
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/product_checker_dev
+DATABASE_ECHO=true
+DATABASE_POOL_SIZE=10
 
-# CORS Configuration
-CORS_ORIGINS=["http://localhost:5173", "http://localhost:8000"]
+# Security
+SECRET_KEY=your-dev-secret-key-change-in-production
 
-# FDA Scraper Configuration
+# API
+API_PREFIX=/api/v1
+DOCS_URL=/docs
+
+# AI
+GROQ_API_KEY=
+CEREBRAS_API_KEY=
+
+# CORS
+CORS_ORIGINS=http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000
+
+# FDA Scraper
 FDA_BASE_URL=https://verification.fda.gov.ph
 FDA_TIMEOUT=30
-FDA_MAX_RETRIES=3
-FDA_RATE_LIMIT_DELAY=1.0
 FDA_MAX_PAGES_PER_RUN=10
+FDA_RATE_LIMIT_DELAY=1.0
 
-# Business Databank Configuration
-BUSINESS_DATABANK_URL=https://databank.business.gov.ph
-SEC_API_URL=https://portal.sec.gov.ph
-SEC_API_KEY=your-sec-api-key-here
-
-# Fuzzy Matching Configuration
+# Fuzzy Matching
 FUZZY_MATCH_THRESHOLD=80
 FUZZY_MATCH_LIMIT=5
 
-# Caching Configuration
-CACHE_ENABLED=True
+# Caching
+CACHE_ENABLED=true
 CACHE_TTL_MINUTES=30
 CACHE_MAX_SIZE=1000
 
-# Background Tasks Configuration
-BACKGROUND_TASK_TIMEOUT=300
+# Logging (Loguru)
+LOG_LEVEL=DEBUG
+LOG_FILE=logs/app.log
+LOG_ROTATION=500 MB
+LOG_RETENTION=10 days
+```
 
-# Logging Configuration
-LOG_LEVEL=INFO
+Generate a secure secret key:
 
-# Groq AI Configuration
-GROQ_API_KEY=your-groq-api-key-here
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
 ### Database Setup
 
-1. Ensure PostgreSQL is installed and running
-2. Create a database specified in your `DATABASE_URL`
-3. The application will automatically create tables on startup
+1. Ensure PostgreSQL is running.
+2. Create the database named in `DATABASE_URL`.
+3. Tables are created automatically on startup.
+4. Apply optional migration scripts in `migrations/` for full-text search indexes and the `pg_trgm` extension.
 
 ## Usage
 
 ### Running the Application
 
-The application includes performance optimizations with **uvloop** and **httptools** for faster async I/O and HTTP parsing.
-
-#### Quick Start (Recommended)
+The recommended entry point is `run_production.py`, which selects development or production settings based on `ENVIRONMENT`:
 
 ```bash
-# Install dependencies
-make install
-
-# Run development server with optimizations
-make dev
-
-# Or run production server with optimizations  
-make prod
-```
-
-#### Development Mode (with auto-reload)
-
-```bash
-# Using the optimized development runner
-python run_dev.py
-
-# Or traditional uvicorn with optimizations
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --loop uvloop --http httptools
-```
-
-#### Production Mode
-
-```bash
-# Using the optimized production runner
 python run_production.py
-
-# Or traditional uvicorn with optimizations
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --loop uvloop --http httptools --workers 4
 ```
 
-The application will be available at `http://localhost:8000`.
+- **Development** (`ENVIRONMENT=development`): Single worker with hot reload on port **6769**.
+- **Production** (`ENVIRONMENT=production`): Four workers with uvloop and httptools on port **6769**.
 
-**API Documentation:**
-- Interactive docs: `http://localhost:8000/docs`
-- Alternative docs: `http://localhost:8000/redoc`
+Alternatively, run uvicorn directly:
+
+```bash
+# Development
+uvicorn app.main:app --reload --host 0.0.0.0 --port 6769
+
+# Production
+uvicorn app.main:app --host 0.0.0.0 --port 6769 --loop uvloop --http httptools --workers 4
+```
+
+Once running, interactive API docs are available at `/docs` and `/redoc`.
 
 ### API Endpoints
 
-- `GET /` - Root endpoint with application info
-- `GET /health` - Health check endpoint
-- `GET /api/v1/products/verify/{product_id}` - Verify product by ID
-- `POST /api/v1/products/verify-image` - Verify product from image upload
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Application name, version, and status |
+| GET | `/health` | Health check with environment and database status |
+| GET | `/api/v1/products/verify/{product_id}` | Verify a product by registration, license, or tracking number |
+| POST | `/api/v1/products/new-verify-image` | Verify a product from an uploaded image (hybrid Groq vision pipeline) |
+
+The image verification endpoint accepts JPEG, PNG, GIF, or WebP files up to 5 MB. It runs a three-layer pipeline: vision extraction, structured field parsing, and fuzzy database matching.
 
 ## Development
 
-### Running Tests
+### Code Quality
 
-To run tests (if available):
+This project uses Ruff for linting and formatting. Configuration lives in `pyproject.toml`.
+
+```bash
+ruff check . --fix
+ruff format .
+```
+
+See `LINTER.md` for details.
+
+### Running Tests
 
 ```bash
 pytest
 ```
 
-### Environment Variables for Development
+Tests use pytest with asyncio support and coverage reporting for the `app` package.
 
-For development, use the following settings in your `.env`:
+### Development Environment
+
+Recommended `.env` values for local work:
 
 ```
 ENVIRONMENT=development
-DEBUG=True
+DEBUG=true
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/product_checker_dev
-CORS_ORIGINS=["http://localhost:5173", "http://localhost:8000"]
+LOG_LEVEL=DEBUG
 ```
 
 ## Production Deployment
 
-For production deployment, ensure the following:
+Before deploying:
 
 - Set `ENVIRONMENT=production`
-- Set `DEBUG=False`
-- Use a strong `SECRET_KEY`
-- Configure proper logging
+- Set `DEBUG=false`
+- Use a strong, unique `SECRET_KEY`
+- Set `LOG_DIAGNOSE=false`
+- Configure file logging if needed (`LOG_FILE`)
+- Run migration scripts against the production database
 
-Example production command:
+Start the server:
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+python run_production.py
 ```
-
-## API Documentation
-
-The API is documented using FastAPI's built-in documentation. After starting the server, visit:
-
-- `http://localhost:8000/docs` for the interactive API documentation
-- `http://localhost:8000/redoc` for the alternative API documentation
 
 ## Troubleshooting
 
-### Common Issues
+**Database connection errors** — Confirm PostgreSQL is running and `DATABASE_URL` uses the `postgresql+asyncpg://` driver prefix.
 
-1. **Database Connection Issues**: Ensure PostgreSQL is running and your `DATABASE_URL` is correct.
-2. **Dependency Issues**: Make sure you're using the virtual environment and have installed all requirements.
-3. **AI Service Issues**: Verify your `GROQ_API_KEY` is set correctly and you have internet access to the Groq services.
+**Missing dependencies** — Activate the virtual environment and reinstall from `requirements.txt`.
 
-### Error Codes
+**AI verification failures** — Verify `GROQ_API_KEY` is set and the service can reach Groq APIs.
 
-- `400`: Bad request - Invalid input data
-- `404`: Not found - Product not found in database
-- `422`: Unprocessable entity - Validation error
-- `500`: Internal server error
+**Production restart loop** — Do not combine hot reload with uvloop/httptools. Use `run_production.py`, which applies the correct settings per environment.
+
+### HTTP Status Codes
+
+| Code | Meaning |
+|------|---------|
+| 400 | Invalid request data |
+| 404 | Product not found |
+| 422 | Validation error |
+| 500 | Internal server error |
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Make your changes
-4. Add tests if applicable
-5. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-6. Push to the branch (`git push origin feature/AmazingFeature`)
-7. Open a Pull Request
+See `CONTRIBUTING.md` for commit conventions, issue templates, and pull request guidelines.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the MIT License. See `LICENSE` for the full text.
 
 ## Acknowledgments
 
-- FastAPI for the excellent web framework
-- SQLAlchemy for the ORM
-- Groq's Llama models for AI capabilities
-- All contributors to the open-source libraries used in this project
+- FastAPI for the web framework
+- SQLAlchemy and asyncpg for database access
+- Groq vision and language models for AI capabilities
+- Contributors to the open-source libraries used in this project
